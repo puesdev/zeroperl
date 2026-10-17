@@ -5,7 +5,7 @@ WASI_SDK_PATH="${WASI_SDK_PATH:-/opt/wasi-sdk}"
 WASM_DIR="${WASM_DIR:-/build/wasm}"
 REPO_DIR="${REPO_DIR:-/build/repo}"
 STACK_SIZE="${STACK_SIZE:-8388608}"
-INITIAL_MEMORY="${INITIAL_MEMORY:-33554432}"
+INITIAL_MEMORY="${INITIAL_MEMORY:-16777216}"
 ASYNCIFY="${ASYNCIFY:-true}"
 
 export PATH="$REPO_DIR/wasi-bin:$PATH"
@@ -69,6 +69,7 @@ wasic \
     -Wl,--wrap=fopen -Wl,--wrap=open -Wl,--wrap=close -Wl,--wrap=read \
     -Wl,--wrap=lseek -Wl,--wrap=stat -Wl,--wrap=fstat \
     -Wl,--wrap=__wasilibc_tell -Wl,--wrap=isatty \
+    -Wl,--wrap=write -Wl,--wrap=dup2 \
     lib/auto/mro/mro.a \
     lib/auto/File/Glob/Glob.a \
     lib/auto/Sys/Hostname/Hostname.a \
@@ -91,13 +92,9 @@ wasic \
     lib/auto/Filter/Util/Call/Call.a \
     lib/auto/Encode/Unicode/Unicode.a \
     lib/auto/Encode/Encode.a \
-    lib/auto/Encode/JP/JP.a \
-    lib/auto/Encode/KR/KR.a \
     lib/auto/Encode/EBCDIC/EBCDIC.a \
-    lib/auto/Encode/CN/CN.a \
     lib/auto/Encode/Symbol/Symbol.a \
     lib/auto/Encode/Byte/Byte.a \
-    lib/auto/Encode/TW/TW.a \
     lib/auto/Compress/Raw/Zlib/Zlib.a \
     lib/auto/Compress/Raw/Bzip2/Bzip2.a \
     lib/auto/MIME/Base64/Base64.a \

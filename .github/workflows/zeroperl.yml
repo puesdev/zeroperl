@@ -23,7 +23,7 @@ on:
       initial-memory:
         description: "WASM initial memory (in bytes)"
         required: false
-        default: "33554432"
+        default: "16777216"
       trim:
         description: "Trim the prefix"
         required: false

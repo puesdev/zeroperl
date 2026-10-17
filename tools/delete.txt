@@ -1259,6 +1259,15 @@ lib/{VERSION}/unicore/lib/XIDS
 lib/{VERSION}/unicore/lib/XIDS/Y.pl
 lib/{VERSION}/unicore/uni_keywords.pl
 lib/{VERSION}/unicore/version
+lib/{VERSION}/wasm32-wasi/Encode/JP.pm
+lib/{VERSION}/wasm32-wasi/Encode/JP
+lib/{VERSION}/wasm32-wasi/Encode/KR.pm
+lib/{VERSION}/wasm32-wasi/Encode/KR
+lib/{VERSION}/wasm32-wasi/Encode/CN.pm
+lib/{VERSION}/wasm32-wasi/Encode/CN
+lib/{VERSION}/wasm32-wasi/Encode/TW.pm
+lib/{VERSION}/wasm32-wasi/Encode/CJKConstants.pm
+lib/{VERSION}/wasm32-wasi/Encode/MIME/Header/ISO_2022_JP.pm
 lib/{VERSION}/wasm32-wasi/File/RandomAccess.pod
 lib/{VERSION}/wasm32-wasi/Image/ExifTool.pod
 lib/{VERSION}/wasm32-wasi/Image/ExifTool/TagNames.pod

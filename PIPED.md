@@ -13,10 +13,14 @@ adds Perl, aimed at what Perl does best: text processing.
 - The worker calls `_initialize`, passes argv (allocated with `malloc`) to
   `zeroperl_init_with_args`, and takes the exit status as its return value
   `& 255` (a compile-phase `exit 0`, as from `-v`, returns 256). It always
-  calls `zeroperl_free_interpreter()` at the end, which flushes STDOUT and
-  STDERR even after `exit` or `die`.
-- Piped's shim must serve `/dev/null` (every `perl -e` opens it at start) and
-  should answer `fd_tell` on fds 0 to 2 with `ESPIPE` rather than `EBADF`.
+  calls `zeroperl_free_interpreter()` at the end, which runs global
+  destruction (`DESTROY` methods) and flushes STDOUT and STDERR, even after
+  `exit` or `die`.
+- argv[0] can be anything. Piped passes `perl`, so `$^X` and `perl -h` say
+  `perl`.
+- zeroperl answers `/dev/null` itself (every `perl -e` opens it at start).
+  Piped's shim should answer `fd_tell` on fds 0 to 2 with `ESPIPE` rather
+  than `EBADF`.
 - Errno values are WASI's, so `$!` and `die`'s exit status differ from Linux:
   a missing file is 44, not 2.
 - Perl's own library is embedded in the wasm, so nothing else ships with it.
@@ -72,22 +76,34 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
     becomes) are wrapped too. Unwrapped, they reached the host with library
     descriptors and left `EBADF` in `$!`, so `use strict; die` exited 8, not
     255.
+  - `/dev/null` is answered from memory by `open` and `fopen`, in any mode:
+    reads give end of file, writes are discarded, and `stat`, `fstat` and
+    `close` work. `write` and `dup2` are wrapped too, so
+    `open STDERR, '>', '/dev/null'` (or STDOUT, or STDIN) discards output,
+    `warn` and `die` messages included. Upstream left `/dev/null` to the host.
+  - `zeroperl_free_interpreter` runs global destruction under
+    `asyncjmp_rt_start`, like every other entry point, so `DESTROY` methods
+    run. Upstream called `perl_destruct` outside it, and they did not.
 - **ExifTool is off by default** (`BUILD_EXIFTOOL=false`), since it roughly
   doubles the wasm. When enabled it uses version 13.55, downloads from CPAN
   with BackPAN and exiftool.org as fallbacks, and fails the build if the
   download fails. Upstream's 13.42 download had started returning 404, and a
   `|| true` hid the failure. The CI workflow defaults match.
+- **Encode's CJK encodings are dropped**: Encode::JP, KR, CN and TW, with
+  Encode::CJKConstants and Encode::MIME::Header::ISO_2022_JP, which only
+  serve them (see "Not available").
+- **`INITIAL_MEMORY` is 16 MiB** (upstream 32 MiB): the 8 MiB stack plus the
+  data, with the heap growing from there.
 
 ### In progress
 
-- Lower `INITIAL_MEMORY` (32 MiB upstream) now that ExifTool is gone.
 - Measure `zeroperl.wasm` (asyncify) against `zeroperl_reactor.wasm`
-  (without). `zeroperl.wasm` is 13.5 MB with everything above.
+  (without). `zeroperl.wasm` is 10.9 MB with everything above.
 
 ## Modules
 
 Every module embedded in the wasm was loaded with `require` in a fresh
-instance behind piped2's WASI shim: 288 load and 24 do not. Those marked * are
+instance behind piped2's WASI shim: 278 load and 24 do not. Those marked * are
 the CPAN additions above.
 
 ### Modules that load
@@ -101,12 +117,10 @@ Compress::Zlib, Config, Config::Extensions, Config::Perl::V, Cwd, DBM_Filter,
 DBM_Filter::compress, DBM_Filter::encode, DBM_Filter::int32,
 DBM_Filter::null, DBM_Filter::utf8, Data::Dumper, Devel::SelfStubber, Digest,
 Digest::MD5, Digest::SHA, Digest::base, Digest::file, DirHandle, Dumpvalue,
-DynaLoader, Encode, Encode::Alias, Encode::Byte, Encode::CJKConstants,
-Encode::CN, Encode::CN::HZ, Encode::Config, Encode::EBCDIC, Encode::Encoder,
-Encode::Encoding, Encode::GSM0338, Encode::Guess, Encode::JP,
-Encode::JP::H2Z, Encode::JP::JIS7, Encode::KR, Encode::KR::2022_KR,
-Encode::MIME::Header, Encode::MIME::Header::ISO_2022_JP, Encode::MIME::Name,
-Encode::Symbol, Encode::TW, Encode::Unicode, Encode::Unicode::UTF7, English,
+DynaLoader, Encode, Encode::Alias, Encode::Byte, Encode::Config,
+Encode::EBCDIC, Encode::Encoder, Encode::Encoding, Encode::GSM0338,
+Encode::Guess, Encode::MIME::Header, Encode::MIME::Name, Encode::Symbol,
+Encode::Unicode, Encode::Unicode::UTF7, English,
 Env, Errno, Exporter, Exporter::Heavy, Fatal, Fcntl, File::Basename,
 File::Compare, File::Copy, File::Find, File::Glob, File::GlobMapper,
 File::Path, File::Spec, File::Spec::AmigaOS, File::Spec::Cygwin,
@@ -182,6 +196,14 @@ are Perl keywords, so `require if` does not parse.
 ## Not available
 
 WASI has no sockets, processes (`fork`, `system`, backticks, pipes to
-commands), threads or asynchronous signals. Upstream also trims modules such
+commands), threads or asynchronous signals. Duplicating a handle with `'>&'`
+or `'<&'` (as in saving and restoring STDERR) needs `dup`, which this build
+lacks.
+
+Encode's legacy CJK conversions are left out: Encode::JP, KR, CN and TW
+(Shift_JIS, EUC-JP, ISO-2022-JP, EUC-KR, GB2312, GBK and Big5), 2.66 MB of
+tables. Chinese, Japanese and Korean text in UTF-8 needs none of them.
+
+Upstream also trims modules such
 as `Test::*`, `Pod::*` and `HTTP::Tiny` from the embedded library (see
 `tools/delete.txt`).

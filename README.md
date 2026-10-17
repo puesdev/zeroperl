@@ -49,7 +49,7 @@ container build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=true 
 | `EXIFTOOL_VERSION` | `13.55` | ExifTool version |
 | `BUILD_EXIFTOOL` | `false` | Include ExifTool (roughly doubles the wasm size) |
 | `STACK_SIZE` | `8388608` | WASM stack (bytes) |
-| `INITIAL_MEMORY` | `33554432` | WASM initial memory (bytes) |
+| `INITIAL_MEMORY` | `16777216` | WASM initial memory (bytes) |
 | `ASYNCIFY` | `true` | Enable asyncify |
 | `TRIM` | `true` | Strip unused modules |
 

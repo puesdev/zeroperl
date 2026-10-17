@@ -85,6 +85,8 @@ extern int __real_stat(const char *restrict path,
 extern int __real_fstat(int fd, struct stat *statbuf);
 extern off_t __real___wasilibc_tell(int fd);
 extern int __real_isatty(int fd);
+extern ssize_t __real_write(int fd, const void *buf, size_t count);
+extern int __real_dup2(int oldfd, int newfd);
 
 //! Maximum number of open SFS (Simple File System) files
 #ifndef SFS_MAX_OPEN_FILES
@@ -117,13 +119,25 @@ static inline void sfs_note_host_fd(int fd, bool owned) {
 
 //! SFS entry structure for tracking open virtual files
 //! Each slot tracks an integer FD, a FILE* (via fmemopen), file size, and a
-//! "used" flag
+//! "used" flag. A /dev/null slot has no FILE*: reads give EOF, writes vanish.
 typedef struct {
   bool used;
+  bool devnull;
   int fd;
   FILE *fp;
   size_t size;
 } SFS_Entry;
+
+//! STDIN, STDOUT and STDERR that have been dup2'd onto /dev/null
+static bool sfs_std_null[3] = {false};
+
+static inline bool sfs_is_devnull_path(const char *path) {
+  return path && strcmp(path, "/dev/null") == 0;
+}
+
+static inline bool sfs_is_std_null(int fd) {
+  return fd >= 0 && fd < 3 && sfs_std_null[fd];
+}
 
 //! Table of open SFS files
 static SFS_Entry sfs_table[SFS_MAX_OPEN_FILES];
@@ -227,18 +241,38 @@ static int sfs_open(const char *path, FILE **outfp) {
   return -1;
 }
 
+//! Allocates an FD for /dev/null, in any mode
+static int sfs_open_devnull(void) {
+  for (int i = 0; i < SFS_MAX_OPEN_FILES; i++) {
+    if (!sfs_table[i].used && !sfs_fd_host_owned[i]) {
+      int newfd = SFS_FD_BASE + i;
+      sfs_table[i].used = true;
+      sfs_table[i].devnull = true;
+      sfs_table[i].fd = newfd;
+      sfs_table[i].fp = NULL;
+      sfs_table[i].size = 0;
+      return newfd;
+    }
+  }
+  errno = EMFILE;
+  return -1;
+}
+
 //! Closes an SFS file descriptor and frees its slot
 static SFS_Result sfs_close(int fd) {
   SFS_Entry *e = sfs_find_by_fd(fd);
   if (!e) {
     return SFS_NOT_OURS;
   }
-  if (!e->fp) {
+  if (!e->fp && !e->devnull) {
     return SFS_ERR;
   }
 
-  fclose(e->fp);
+  if (e->fp) {
+    fclose(e->fp);
+  }
   e->fp = NULL;
+  e->devnull = false;
   e->used = false;
   e->fd = -1;
   e->size = 0;
@@ -249,6 +283,9 @@ static SFS_Result sfs_close(int fd) {
 __attribute__((noinline)) static ssize_t sfs_read(int fd, void *buf,
                                                   size_t count) {
   SFS_Entry *e = sfs_find_by_fd(fd);
+  if (e && e->devnull) {
+    return 0;
+  }
   if (!e || !e->fp) {
     return -1;
   }
@@ -258,6 +295,9 @@ __attribute__((noinline)) static ssize_t sfs_read(int fd, void *buf,
 //! Performs fseek/ftell if FD is ours
 static off_t sfs_lseek(int fd, off_t offset, int whence) {
   SFS_Entry *e = sfs_find_by_fd(fd);
+  if (e && e->devnull) {
+    return 0;
+  }
   if (!e || !e->fp) {
     return (off_t)-1;
   }
@@ -286,6 +326,11 @@ static int sfs_access(const char *path) {
 //! If path != NULL: path-based. If path == NULL: FD-based
 static SFS_Stat_Result sfs_stat(const char *path, int fd, struct stat *stbuf) {
   if (path) {
+    if (sfs_is_devnull_path(path)) {
+      memset(stbuf, 0, sizeof(*stbuf));
+      stbuf->st_mode = S_IFCHR | 0666;
+      return SFS_STAT_OURS;
+    }
     if (sfs_has_prefix(path)) {
       const unsigned char *start = NULL;
       size_t size = 0;
@@ -306,14 +351,28 @@ static SFS_Stat_Result sfs_stat(const char *path, int fd, struct stat *stbuf) {
     }
     memset(stbuf, 0, sizeof(*stbuf));
     stbuf->st_size = (off_t)e->size;
-    stbuf->st_mode = S_IFREG;
+    stbuf->st_mode = e->devnull ? (S_IFCHR | 0666) : S_IFREG;
     return SFS_STAT_OURS;
   }
+}
+
+static ssize_t sfs_devnull_cookie_read(void *cookie, char *buf, size_t size) {
+  return 0;
+}
+
+static ssize_t sfs_devnull_cookie_write(void *cookie, const char *buf,
+                                        size_t size) {
+  return (ssize_t)size;
 }
 
 //! Wrapper for fopen: tries SFS first, then falls back to real fopen
 __attribute__((noinline)) FILE *__wrap_fopen(const char *path,
                                              const char *mode) {
+  if (sfs_is_devnull_path(path)) {
+    cookie_io_functions_t io = {.read = sfs_devnull_cookie_read,
+                                .write = sfs_devnull_cookie_write};
+    return fopencookie(NULL, mode, io);
+  }
   if (sfs_has_prefix(path)) {
     FILE *fp = NULL;
     int sfd = sfs_open(path, &fp);
@@ -340,6 +399,9 @@ __attribute__((noinline)) int __wrap_open(const char *path, int flags, ...) {
   }
   va_end(args);
 
+  if (sfs_is_devnull_path(path)) {
+    return sfs_open_devnull();
+  }
   if (sfs_has_prefix(path)) {
     int sfd = sfs_open(path, NULL);
     if (sfd >= 0) {
@@ -368,6 +430,9 @@ __attribute__((noinline)) int __wrap_close(int fd) {
 
 //! Wrapper for access: tries SFS first, then falls back to real access
 __attribute__((noinline)) int __wrap_access(const char *path, int amode) {
+  if (sfs_is_devnull_path(path)) {
+    return 0;
+  }
   if (sfs_has_prefix(path)) {
     return sfs_access(path);
   }
@@ -401,6 +466,9 @@ __attribute__((noinline)) int __wrap_fstat(int fd, struct stat *stbuf) {
 
 //! Wrapper for read: tries SFS first, then falls back to real read
 __attribute__((noinline)) ssize_t __wrap_read(int fd, void *buf, size_t count) {
+  if (sfs_is_std_null(fd)) {
+    return 0;
+  }
   ssize_t r = sfs_read(fd, buf, count);
   if (r >= 0) {
     return r;
@@ -410,6 +478,9 @@ __attribute__((noinline)) ssize_t __wrap_read(int fd, void *buf, size_t count) {
 
 //! Wrapper for lseek: tries SFS first, then falls back to real lseek
 __attribute__((noinline)) off_t __wrap_lseek(int fd, off_t offset, int whence) {
+  if (sfs_is_std_null(fd)) {
+    return 0;
+  }
   off_t pos = sfs_lseek(fd, offset, whence);
   if (pos >= 0) {
     return pos;
@@ -420,6 +491,9 @@ __attribute__((noinline)) off_t __wrap_lseek(int fd, off_t offset, int whence) {
 //! Wrapper for wasi-libc's tell, which its lseek(fd, 0, SEEK_CUR) macro calls
 //! in place of lseek
 __attribute__((noinline)) off_t __wrap___wasilibc_tell(int fd) {
+  if (sfs_is_std_null(fd)) {
+    return 0;
+  }
   off_t pos = sfs_lseek(fd, 0, SEEK_CUR);
   if (pos >= 0) {
     return pos;
@@ -429,11 +503,40 @@ __attribute__((noinline)) off_t __wrap___wasilibc_tell(int fd) {
 
 //! Wrapper for isatty: SFS files are never terminals
 __attribute__((noinline)) int __wrap_isatty(int fd) {
-  if (sfs_find_by_fd(fd)) {
+  if (sfs_find_by_fd(fd) || sfs_is_std_null(fd)) {
     errno = ENOTTY;
     return 0;
   }
   return __real_isatty(fd);
+}
+
+//! Wrapper for write: /dev/null, and std streams dup2'd onto it, discard
+__attribute__((noinline)) ssize_t __wrap_write(int fd, const void *buf,
+                                               size_t count) {
+  SFS_Entry *e = sfs_find_by_fd(fd);
+  if ((e && e->devnull) || sfs_is_std_null(fd)) {
+    return (ssize_t)count;
+  }
+  return __real_write(fd, buf, count);
+}
+
+//! Wrapper for dup2: perl reopens STDIN/STDOUT/STDERR with dup2, which the
+//! host can't do for an SFS descriptor, so /dev/null is tracked here
+__attribute__((noinline)) int __wrap_dup2(int oldfd, int newfd) {
+  SFS_Entry *e = sfs_find_by_fd(oldfd);
+  bool to_null = (e && e->devnull) || sfs_is_std_null(oldfd);
+  if (newfd >= 0 && newfd < 3) {
+    if (to_null) {
+      sfs_std_null[newfd] = true;
+      return newfd;
+    }
+    int r = __real_dup2(oldfd, newfd);
+    if (r >= 0) {
+      sfs_std_null[newfd] = false;
+    }
+    return r;
+  }
+  return __real_dup2(oldfd, newfd);
 }
 
 //! Wrapper for fileno: checks SFS first, then falls back to real fileno
@@ -888,6 +991,7 @@ static int zeroperl_reset_callback(int argc, char **argv) {
   }
 
   perl_destruct(zero_perl);
+  memset(sfs_std_null, 0, sizeof(sfs_std_null));
   perl_construct(zero_perl);
 
   PL_perl_destruct_level = 0;
@@ -996,13 +1100,23 @@ int zeroperl_run_file(const char *filepath, int argc, char **argv) {
 //!
 //! Destructs and frees the interpreter but leaves the Perl system initialized.
 //! After this, you can call zeroperl_init() again for a fresh interpreter.
+static int zeroperl_free_callback(int argc, char **argv) {
+  (void)argc;
+  (void)argv;
+  perl_destruct(zero_perl);
+  perl_free(zero_perl);
+  return 0;
+}
+
+//! Global destruction runs DESTROY methods, which can setjmp, so it runs
+//! under asyncjmp_rt_start like every other entry point.
 ZEROPERL_API("zeroperl_free_interpreter")
 void zeroperl_free_interpreter(void) {
   if (zero_perl) {
-    perl_destruct(zero_perl);
-    perl_free(zero_perl);
+    asyncjmp_rt_start(zeroperl_free_callback, 0, NULL);
     zero_perl = NULL;
     zero_perl_can_evaluate = false;
+    memset(sfs_std_null, 0, sizeof(sfs_std_null));
   }
 }
 
@@ -2197,13 +2311,9 @@ EXTERN_C void boot_Hash__Util(pTHX_ CV *cv);
 EXTERN_C void boot_Filter__Util__Call(pTHX_ CV *cv);
 EXTERN_C void boot_Encode__Unicode(pTHX_ CV *cv);
 EXTERN_C void boot_Encode(pTHX_ CV *cv);
-EXTERN_C void boot_Encode__JP(pTHX_ CV *cv);
-EXTERN_C void boot_Encode__KR(pTHX_ CV *cv);
 EXTERN_C void boot_Encode__EBCDIC(pTHX_ CV *cv);
-EXTERN_C void boot_Encode__CN(pTHX_ CV *cv);
 EXTERN_C void boot_Encode__Symbol(pTHX_ CV *cv);
 EXTERN_C void boot_Encode__Byte(pTHX_ CV *cv);
-EXTERN_C void boot_Encode__TW(pTHX_ CV *cv);
 EXTERN_C void boot_Compress__Raw__Zlib(pTHX_ CV *cv);
 EXTERN_C void boot_Compress__Raw__Bzip2(pTHX_ CV *cv);
 EXTERN_C void boot_MIME__Base64(pTHX_ CV *cv);
@@ -2244,13 +2354,9 @@ static void xs_init(pTHX) {
   newXS("Filter::Util::Call::bootstrap", boot_Filter__Util__Call, file);
   newXS("Encode::Unicode::bootstrap", boot_Encode__Unicode, file);
   newXS("Encode::bootstrap", boot_Encode, file);
-  newXS("Encode::JP::bootstrap", boot_Encode__JP, file);
-  newXS("Encode::KR::bootstrap", boot_Encode__KR, file);
   newXS("Encode::EBCDIC::bootstrap", boot_Encode__EBCDIC, file);
-  newXS("Encode::CN::bootstrap", boot_Encode__CN, file);
   newXS("Encode::Symbol::bootstrap", boot_Encode__Symbol, file);
   newXS("Encode::Byte::bootstrap", boot_Encode__Byte, file);
-  newXS("Encode::TW::bootstrap", boot_Encode__TW, file);
   newXS("Compress::Raw::Zlib::bootstrap", boot_Compress__Raw__Zlib, file);
   newXS("Compress::Raw::Bzip2::bootstrap", boot_Compress__Raw__Bzip2, file);
   newXS("MIME::Base64::bootstrap", boot_MIME__Base64, file);
