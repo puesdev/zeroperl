@@ -83,38 +83,36 @@ extern int __real_access(const char *path, int flags);
 extern int __real_stat(const char *restrict path,
                        struct stat *restrict statbuf);
 extern int __real_fstat(int fd, struct stat *statbuf);
-
-//! Maximum number of file descriptors to track
-#ifndef FD_MAX_TRACK
-#define FD_MAX_TRACK 32
-#endif
+extern off_t __real___wasilibc_tell(int fd);
+extern int __real_isatty(int fd);
 
 //! Maximum number of open SFS (Simple File System) files
 #ifndef SFS_MAX_OPEN_FILES
 #define SFS_MAX_OPEN_FILES 16
 #endif
 
-//! Tracks which file descriptors are in use
-static bool g_fd_in_use[FD_MAX_TRACK] = {false};
+//! SFS descriptors are SFS_FD_BASE + slot, clear of the descriptors hosts hand
+//! out from 3 upward. PerlIO keeps an array indexed by fd, so keep it small.
+#ifndef SFS_FD_BASE
+#define SFS_FD_BASE 4096
+#endif
 
-//! Marks a file descriptor as in use (not thread-safe)
-static inline void fd_mark_in_use(int fd) {
-  if (fd >= 0 && fd < FD_MAX_TRACK) {
-    g_fd_in_use[fd] = true;
-  }
+//! SFS slots whose descriptor number the host has handed out anyway
+static bool sfs_fd_host_owned[SFS_MAX_OPEN_FILES] = {false};
+
+//! Returns the SFS slot a descriptor number belongs to, or -1
+static inline int sfs_slot_of_fd(int fd) {
+  return (fd >= SFS_FD_BASE && fd < SFS_FD_BASE + SFS_MAX_OPEN_FILES)
+             ? fd - SFS_FD_BASE
+             : -1;
 }
 
-//! Marks a file descriptor as free
-static inline void fd_mark_free(int fd) {
-  if (fd >= 0 && fd < FD_MAX_TRACK) {
-    g_fd_in_use[fd] = false;
+//! Records whether the host holds a descriptor in the SFS range
+static inline void sfs_note_host_fd(int fd, bool owned) {
+  int slot = sfs_slot_of_fd(fd);
+  if (slot >= 0) {
+    sfs_fd_host_owned[slot] = owned;
   }
-}
-
-//! Checks if a file descriptor is in use
-//! Out-of-range FDs are treated as in use
-static inline bool fd_is_in_use(int fd) {
-  return (fd >= 0 && fd < FD_MAX_TRACK) ? g_fd_in_use[fd] : true;
 }
 
 //! SFS entry structure for tracking open virtual files
@@ -129,9 +127,6 @@ typedef struct {
 
 //! Table of open SFS files
 static SFS_Entry sfs_table[SFS_MAX_OPEN_FILES];
-
-//! Starting FD offset for SFS (skips standard FDs 0-2)
-static int sfs_fd_start = 3;
 
 //! Result codes for SFS operations
 typedef enum { SFS_OK = 0, SFS_ERR = -1, SFS_NOT_OURS = -2 } SFS_Result;
@@ -184,27 +179,13 @@ static bool sfs_lookup_path(const char *path, const unsigned char **found_start,
   return false;
 }
 
-//! Finds the next free descriptor in [sfs_fd_start..FD_MAX_TRACK-1]
-//! Forcibly exits if no free FDs are available
-static int sfs_allocate_fd(void) {
-  for (int fd = sfs_fd_start; fd < FD_MAX_TRACK; fd++) {
-    if (!fd_is_in_use(fd)) {
-      fd_mark_in_use(fd);
-      return fd;
-    }
-  }
-  __wasi_proc_exit(10);
-  return -1;
-}
-
 //! Finds an SFS table entry by file descriptor
 static SFS_Entry *sfs_find_by_fd(int fd) {
-  for (int i = 0; i < SFS_MAX_OPEN_FILES; i++) {
-    if (sfs_table[i].used && sfs_table[i].fd == fd) {
-      return &sfs_table[i];
-    }
+  int slot = sfs_slot_of_fd(fd);
+  if (slot < 0 || !sfs_table[slot].used) {
+    return NULL;
   }
-  return NULL;
+  return &sfs_table[slot];
 }
 
 //! Opens a path from SFS using fmemopen and allocates an FD
@@ -227,8 +208,8 @@ static int sfs_open(const char *path, FILE **outfp) {
   }
 
   for (int i = 0; i < SFS_MAX_OPEN_FILES; i++) {
-    if (!sfs_table[i].used) {
-      int newfd = sfs_allocate_fd();
+    if (!sfs_table[i].used && !sfs_fd_host_owned[i]) {
+      int newfd = SFS_FD_BASE + i;
       sfs_table[i].used = true;
       sfs_table[i].fd = newfd;
       sfs_table[i].fp = fp;
@@ -258,7 +239,6 @@ static SFS_Result sfs_close(int fd) {
 
   fclose(e->fp);
   e->fp = NULL;
-  fd_mark_free(e->fd);
   e->used = false;
   e->fd = -1;
   e->size = 0;
@@ -345,10 +325,7 @@ __attribute__((noinline)) FILE *__wrap_fopen(const char *path,
 
   FILE *realfp = __real_fopen(path, mode);
   if (realfp) {
-    int realfd = fileno(realfp);
-    if (realfd >= 0 && realfd < FD_MAX_TRACK) {
-      fd_mark_in_use(realfd);
-    }
+    sfs_note_host_fd(fileno(realfp), true);
   }
   return realfp;
 }
@@ -372,9 +349,7 @@ __attribute__((noinline)) int __wrap_open(const char *path, int flags, ...) {
   }
 
   int realfd = __real_open(path, flags, mode);
-  if (realfd >= 0 && realfd < FD_MAX_TRACK) {
-    fd_mark_in_use(realfd);
-  }
+  sfs_note_host_fd(realfd, true);
   return realfd;
 }
 
@@ -385,9 +360,7 @@ __attribute__((noinline)) int __wrap_close(int fd) {
     return 0;
   }
   if (rc == SFS_NOT_OURS) {
-    if (fd >= 0 && fd < FD_MAX_TRACK) {
-      fd_mark_free(fd);
-    }
+    sfs_note_host_fd(fd, false);
     return __real_close(fd);
   }
   return (int)rc;
@@ -444,6 +417,25 @@ __attribute__((noinline)) off_t __wrap_lseek(int fd, off_t offset, int whence) {
   return __real_lseek(fd, offset, whence);
 }
 
+//! Wrapper for wasi-libc's tell, which its lseek(fd, 0, SEEK_CUR) macro calls
+//! in place of lseek
+__attribute__((noinline)) off_t __wrap___wasilibc_tell(int fd) {
+  off_t pos = sfs_lseek(fd, 0, SEEK_CUR);
+  if (pos >= 0) {
+    return pos;
+  }
+  return __real___wasilibc_tell(fd);
+}
+
+//! Wrapper for isatty: SFS files are never terminals
+__attribute__((noinline)) int __wrap_isatty(int fd) {
+  if (sfs_find_by_fd(fd)) {
+    errno = ENOTTY;
+    return 0;
+  }
+  return __real_isatty(fd);
+}
+
 //! Wrapper for fileno: checks SFS first, then falls back to real fileno
 __attribute__((noinline)) int __wrap_fileno(FILE *stream) {
   for (int i = 0; i < SFS_MAX_OPEN_FILES; i++) {
@@ -453,9 +445,7 @@ __attribute__((noinline)) int __wrap_fileno(FILE *stream) {
   }
 
   int realfd = __real_fileno(stream);
-  if (realfd >= 0 && realfd < FD_MAX_TRACK) {
-    fd_mark_in_use(realfd);
-  }
+  sfs_note_host_fd(realfd, true);
   return realfd;
 }
 
@@ -661,6 +651,35 @@ static XS(xs_host_dispatch) {
   XSRETURN(1);
 }
 
+//! Parses and runs the program in ctx->data.init on a constructed interpreter
+//!
+//! Returns Perl's exit status, as perl does. A compile-phase exit(0) (e.g.
+//! -v, BEGIN { exit }) returns 0x100 so it is distinct from success; hosts
+//! that want a process status take it & 255.
+static int zeroperl_parse_and_run(zeroperl_context *ctx) {
+  static char *minimal_argv[] = {"", "-e", "0", NULL};
+  int status;
+
+  if (ctx->data.init.argc > 0 && ctx->data.init.argv) {
+    status = perl_parse(zero_perl, xs_init, ctx->data.init.argc,
+                        ctx->data.init.argv, environ);
+  } else {
+    status = perl_parse(zero_perl, xs_init, 3, minimal_argv, environ);
+  }
+  if (status == 0) {
+    status = perl_run(zero_perl);
+  }
+  if (status != 0) {
+    zeroperl_capture_error();
+    ctx->result = status;
+    return status;
+  }
+
+  zero_perl_can_evaluate = true;
+  ctx->result = 0;
+  return 0;
+}
+
 //! Internal callback for initialization
 static int zeroperl_init_callback(int argc, char **argv) {
   (void)argc;
@@ -683,32 +702,7 @@ static int zeroperl_init_callback(int argc, char **argv) {
   PL_perl_destruct_level = 0;
   PL_exit_flags &= ~PERL_EXIT_DESTRUCT_END;
 
-  if (ctx->data.init.argc > 0 && ctx->data.init.argv) {
-    if (perl_parse(zero_perl, xs_init, ctx->data.init.argc, ctx->data.init.argv,
-                   environ) != 0) {
-      zeroperl_capture_error();
-      ctx->result = 1;
-      return 1;
-    }
-  } else {
-    char *minimal_argv[] = {"", "-e", "0", NULL};
-    if (perl_parse(zero_perl, xs_init, 3, minimal_argv, environ) != 0) {
-      zeroperl_capture_error();
-      ctx->result = 1;
-      return 1;
-    }
-  }
-
-  int run_result = perl_run(zero_perl);
-  if (run_result != 0) {
-    zeroperl_capture_error();
-    ctx->result = run_result;
-    return run_result;
-  }
-
-  zero_perl_can_evaluate = true;
-  ctx->result = 0;
-  return 0;
+  return zeroperl_parse_and_run(ctx);
 }
 
 //! Internal callback for evaluation
@@ -905,32 +899,7 @@ static int zeroperl_reset_callback(int argc, char **argv) {
   // its old value across resets in non-MULTIPLICITY builds)
   PL_opfreehook = NULL;
 
-  if (ctx->data.init.argc > 0 && ctx->data.init.argv) {
-    if (perl_parse(zero_perl, xs_init, ctx->data.init.argc, ctx->data.init.argv,
-                   environ) != 0) {
-      zeroperl_capture_error();
-      ctx->result = 1;
-      return 1;
-    }
-  } else {
-    char *minimal_argv[] = {"", "-e", "0", NULL};
-    if (perl_parse(zero_perl, xs_init, 3, minimal_argv, environ) != 0) {
-      zeroperl_capture_error();
-      ctx->result = 1;
-      return 1;
-    }
-  }
-
-  int run_result = perl_run(zero_perl);
-  if (run_result != 0) {
-    zeroperl_capture_error();
-    ctx->result = run_result;
-    return run_result;
-  }
-
-  zero_perl_can_evaluate = true;
-  ctx->result = 0;
-  return 0;
+  return zeroperl_parse_and_run(ctx);
 }
 
 //! Initialize the Perl interpreter
@@ -1100,12 +1069,13 @@ bool zeroperl_can_evaluate(void) { return zero_perl_can_evaluate; }
 
 //! Flush STDOUT and STDERR buffers
 //!
-//! Forces any buffered output to be written immediately.
+//! Forces any buffered output to be written immediately, including after the
+//! program has called exit or died.
 //!
 //! Returns 0 on success, -1 if interpreter not initialized.
 ZEROPERL_API("zeroperl_flush")
 int zeroperl_flush(void) {
-  if (!zero_perl || !zero_perl_can_evaluate) {
+  if (!zero_perl) {
     return -1;
   }
 
@@ -2238,10 +2208,13 @@ EXTERN_C void boot_Compress__Raw__Zlib(pTHX_ CV *cv);
 EXTERN_C void boot_Compress__Raw__Bzip2(pTHX_ CV *cv);
 EXTERN_C void boot_MIME__Base64(pTHX_ CV *cv);
 EXTERN_C void boot_Cwd(pTHX_ CV *cv);
+EXTERN_C void boot_Storable(pTHX_ CV *cv);
 EXTERN_C void boot_List__Util(pTHX_ CV *cv);
 EXTERN_C void boot_Fcntl(pTHX_ CV *cv);
 EXTERN_C void boot_Opcode(pTHX_ CV *cv);
 EXTERN_C void boot_Time__HiRes(pTHX_ CV* cv);
+EXTERN_C void boot_B(pTHX_ CV *cv);
+EXTERN_C void boot_POSIX(pTHX_ CV *cv);
 
 static void xs_init(pTHX) {
   static const char file[] = __FILE__;
@@ -2281,8 +2254,11 @@ static void xs_init(pTHX) {
   newXS("Compress::Raw::Bzip2::bootstrap", boot_Compress__Raw__Bzip2, file);
   newXS("MIME::Base64::bootstrap", boot_MIME__Base64, file);
   newXS("Cwd::bootstrap", boot_Cwd, file);
+  newXS("Storable::bootstrap", boot_Storable, file);
   newXS("List::Util::bootstrap", boot_List__Util, file);
   newXS("Fcntl::bootstrap", boot_Fcntl, file);
   newXS("Opcode::bootstrap", boot_Opcode, file);
   newXS("Time::HiRes::bootstrap", boot_Time__HiRes, file);
+  newXS("B::bootstrap", boot_B, file);
+  newXS("POSIX::bootstrap", boot_POSIX, file);
 }

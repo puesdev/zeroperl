@@ -2,6 +2,8 @@ zeroperl is an experimental build of Perl5 in a sandboxed, self-contained WebAss
 
 Read the full blog [here](https://andrews.substack.com/p/zeroperl-sandboxed-perl-with-webassembly)
 
+This fork builds the `perl` command for [Piped](https://legendum.dojos.name/piped2). See [PIPED.md](PIPED.md) for how it is used and how it differs from upstream.
+
 ## Build
 
 Requires Docker or Apple Container (macOS).
@@ -30,12 +32,12 @@ Output in `./output/`:
 
 **Docker:**
 ```bash
-docker build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=false -t zeroperl .
+docker build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=true -t zeroperl .
 ```
 
 **Apple Container:**
 ```bash
-container build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=false -t zeroperl .
+container build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=true -t zeroperl .
 ```
 
 <details>
@@ -44,8 +46,8 @@ container build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=false
 | Arg | Default | |
 |-----|---------|--|
 | `PERL_VERSION` | `5.42.0` | Perl source version |
-| `EXIFTOOL_VERSION` | `13.42` | ExifTool version |
-| `BUILD_EXIFTOOL` | `true` | Include ExifTool |
+| `EXIFTOOL_VERSION` | `13.55` | ExifTool version |
+| `BUILD_EXIFTOOL` | `false` | Include ExifTool (roughly doubles the wasm size) |
 | `STACK_SIZE` | `8388608` | WASM stack (bytes) |
 | `INITIAL_MEMORY` | `33554432` | WASM initial memory (bytes) |
 | `ASYNCIFY` | `true` | Enable asyncify |

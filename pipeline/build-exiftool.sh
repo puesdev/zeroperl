@@ -1,14 +1,22 @@
 #!/bin/sh
 set -e
 
-EXIFTOOL_VERSION="${EXIFTOOL_VERSION:-13.42}"
+EXIFTOOL_VERSION="${EXIFTOOL_VERSION:-13.55}"
 NATIVE_DIR="${NATIVE_DIR:-/build/native}"
 REPO_DIR="${REPO_DIR:-/build/repo}"
 
 export PATH="$NATIVE_DIR/prefix/bin:$PATH"
 PERL="$NATIVE_DIR/prefix/bin/perl"
 
-curl -fsSL "https://www.exiftool.org/Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz" | tar -xzf - -C /build
+# exiftool.org only hosts the latest release; CPAN and BackPAN keep older ones
+TARBALL="Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz"
+for url in \
+    "https://cpan.metacpan.org/authors/id/E/EX/EXIFTOOL/$TARBALL" \
+    "https://backpan.perl.org/authors/id/E/EX/EXIFTOOL/$TARBALL" \
+    "https://exiftool.org/$TARBALL"; do
+    curl -fsSL "$url" -o "/build/$TARBALL" && break
+done
+tar -xzf "/build/$TARBALL" -C /build
 cd "/build/Image-ExifTool-${EXIFTOOL_VERSION}"
 $PERL Makefile.PL
 make

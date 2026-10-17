@@ -13,11 +13,11 @@ struct passwd {
     char *pw_shell;
 };
 
-struct passwd *getpwnam(const char *name) {
+static inline struct passwd *getpwnam(const char *name) {
     return NULL; 
 }
 
-struct passwd *getpwuid(uid_t uid) {
+static inline struct passwd *getpwuid(uid_t uid) {
     return NULL; 
 }
 

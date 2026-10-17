@@ -11,11 +11,11 @@ struct group {
     char **gr_mem; 
 };
 
-struct group *getgrnam(const char *name) {
+static inline struct group *getgrnam(const char *name) {
     return NULL; 
 }
 
-struct group *getgrgid(gid_t gid) {
+static inline struct group *getgrgid(gid_t gid) {
     return NULL; 
 }
 

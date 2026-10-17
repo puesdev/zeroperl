@@ -68,6 +68,7 @@ wasic \
     -Wl,--whole-archive libperl.a -Wl,--no-whole-archive \
     -Wl,--wrap=fopen -Wl,--wrap=open -Wl,--wrap=close -Wl,--wrap=read \
     -Wl,--wrap=lseek -Wl,--wrap=stat -Wl,--wrap=fstat \
+    -Wl,--wrap=__wasilibc_tell -Wl,--wrap=isatty \
     lib/auto/File/Glob/Glob.a \
     lib/auto/Sys/Hostname/Hostname.a \
     lib/auto/PerlIO/via/via.a \
@@ -100,10 +101,13 @@ wasic \
     lib/auto/Compress/Raw/Bzip2/Bzip2.a \
     lib/auto/MIME/Base64/Base64.a \
     lib/auto/Cwd/Cwd.a \
+    lib/auto/Storable/Storable.a \
     lib/auto/List/Util/Util.a \
     lib/auto/Fcntl/Fcntl.a \
     lib/auto/Opcode/Opcode.a \
     lib/auto/Time/HiRes/HiRes.a \
+    lib/auto/B/B.a \
+    lib/auto/POSIX/POSIX.a \
     $(cat ext.libs) \
     -lz -lbz2 \
     -lm -lwasi-emulated-signal -lwasi-emulated-getpid \

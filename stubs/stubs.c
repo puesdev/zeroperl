@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdarg.h>
+#include <errno.h>
 
 // Define mode_t as unsigned int if not already defined
 typedef unsigned int mode_t;
@@ -41,3 +42,11 @@ int wait(int *status) { return -1; }
 
 // Timezone functions
 int tzset() { return 0; } // Adjusted to return int as expected
+
+// Referenced by POSIX
+int pipe(int fds[2]) { errno = ENOSYS; return -1; }
+// Only called as mkfifo's fallback, mknod(path, mode | S_IFIFO, 0), with no
+// prototype in scope, so dev arrives as an int
+int mknod(const char *path, mode_t mode, int dev) { errno = ENOSYS; return -1; }
+int pause(void) { errno = ENOSYS; return -1; }
+char *ttyname(int fd) { errno = ENOTTY; return 0; }
