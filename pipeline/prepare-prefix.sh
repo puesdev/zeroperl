@@ -21,6 +21,8 @@ fi
 
 node "$REPO_DIR/tools/delete.js" "$REPO_DIR/tools/delete.txt" /zeroperl "$PERL_VERSION"
 
+"$REPO_DIR/pipeline/add-cpan-modules.sh"
+
 if [ "$TRIM" = "true" ]; then
     export PATH="$NATIVE_DIR/prefix/bin:$PATH"
     find /zeroperl -type f \( -name '*.pl' -o -name '*.pm' \) -exec chmod u+w {} \;

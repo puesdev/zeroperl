@@ -2215,6 +2215,7 @@ EXTERN_C void boot_Opcode(pTHX_ CV *cv);
 EXTERN_C void boot_Time__HiRes(pTHX_ CV* cv);
 EXTERN_C void boot_B(pTHX_ CV *cv);
 EXTERN_C void boot_POSIX(pTHX_ CV *cv);
+EXTERN_C void boot_mro(pTHX_ CV *cv);
 
 static void xs_init(pTHX) {
   static const char file[] = __FILE__;
@@ -2261,4 +2262,5 @@ static void xs_init(pTHX) {
   newXS("Time::HiRes::bootstrap", boot_Time__HiRes, file);
   newXS("B::bootstrap", boot_B, file);
   newXS("POSIX::bootstrap", boot_POSIX, file);
+  newXS("mro::bootstrap", boot_mro, file);
 }

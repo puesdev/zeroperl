@@ -69,6 +69,7 @@ wasic \
     -Wl,--wrap=fopen -Wl,--wrap=open -Wl,--wrap=close -Wl,--wrap=read \
     -Wl,--wrap=lseek -Wl,--wrap=stat -Wl,--wrap=fstat \
     -Wl,--wrap=__wasilibc_tell -Wl,--wrap=isatty \
+    lib/auto/mro/mro.a \
     lib/auto/File/Glob/Glob.a \
     lib/auto/Sys/Hostname/Hostname.a \
     lib/auto/PerlIO/via/via.a \

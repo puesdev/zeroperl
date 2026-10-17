@@ -7,9 +7,7 @@ lib/{VERSION}/App/Prove/State.pm
 lib/{VERSION}/App/Prove/State/Result
 lib/{VERSION}/App/Prove/State/Result.pm
 lib/{VERSION}/App/Prove/State/Result/Test.pm
-lib/{VERSION}/B
 lib/{VERSION}/B/Deparse.pm
-lib/{VERSION}/B/Op_private.pm
 lib/{VERSION}/CPAN
 lib/{VERSION}/CPAN.pm
 lib/{VERSION}/CPAN/.DS_Store

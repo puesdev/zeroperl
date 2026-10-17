@@ -38,6 +38,14 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
 - **Storable** is built in as a static XS extension. Upstream excluded it, and
   `Encode.pm` needs it, so `use Encode` failed with `Can't locate Storable.pm`.
 - **B** and **POSIX** are built in as static XS extensions.
+- **mro** is linked into the wasm. Upstream compiled it but never linked it,
+  so `use mro 'c3'` failed.
+- **`B/Op_private.pm`** is kept (upstream deleted it), so B::Concise,
+  B::Showlex and B::Terse load.
+- **Pure-Perl CPAN modules** are added by `pipeline/add-cpan-modules.sh` at
+  pinned releases: Text::CSV 2.06 (with Text::CSV_PP), YAML::Tiny 1.76,
+  XML::Tiny 2.07, URI::Escape (from URI 5.37), Algorithm::Diff 1.201,
+  Text::Diff 1.46 and CGI::Tiny 1.003.
 - **WASI shims for POSIX** in `stubs/`, which wasi-libc lacks:
   - `fenv.h`: the rounding-mode constants. WebAssembly only rounds to nearest,
     so `fesetround` rejects the others.
@@ -74,8 +82,102 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
 
 - Lower `INITIAL_MEMORY` (32 MiB upstream) now that ExifTool is gone.
 - Measure `zeroperl.wasm` (asyncify) against `zeroperl_reactor.wasm`
-  (without). B, POSIX and these fixes add about 0.3 MB to `zeroperl.wasm`
-  (13.2 MB with Storable, B and POSIX).
+  (without). `zeroperl.wasm` is 13.5 MB with everything above.
+
+## Modules
+
+Every module embedded in the wasm was loaded with `require` in a fresh
+instance behind piped2's WASI shim: 288 load and 24 do not. Those marked * are
+the CPAN additions above.
+
+### Modules that load
+
+Algorithm::Diff\*, Algorithm::DiffOld\*, Archive::Tar,
+Archive::Tar::Constant, Archive::Tar::File, Attribute::Handlers, AutoLoader,
+AutoSplit, B, B::Concise, B::Op_private, B::Showlex, B::Terse, B::Xref,
+Benchmark, CGI::Tiny\*, CGI::Tiny::Multipart\*, CGI::Tiny::_Debug\*, Carp,
+Carp::Heavy, Class::Struct, Compress::Raw::Bzip2, Compress::Raw::Zlib,
+Compress::Zlib, Config, Config::Extensions, Config::Perl::V, Cwd, DBM_Filter,
+DBM_Filter::compress, DBM_Filter::encode, DBM_Filter::int32,
+DBM_Filter::null, DBM_Filter::utf8, Data::Dumper, Devel::SelfStubber, Digest,
+Digest::MD5, Digest::SHA, Digest::base, Digest::file, DirHandle, Dumpvalue,
+DynaLoader, Encode, Encode::Alias, Encode::Byte, Encode::CJKConstants,
+Encode::CN, Encode::CN::HZ, Encode::Config, Encode::EBCDIC, Encode::Encoder,
+Encode::Encoding, Encode::GSM0338, Encode::Guess, Encode::JP,
+Encode::JP::H2Z, Encode::JP::JIS7, Encode::KR, Encode::KR::2022_KR,
+Encode::MIME::Header, Encode::MIME::Header::ISO_2022_JP, Encode::MIME::Name,
+Encode::Symbol, Encode::TW, Encode::Unicode, Encode::Unicode::UTF7, English,
+Env, Errno, Exporter, Exporter::Heavy, Fatal, Fcntl, File::Basename,
+File::Compare, File::Copy, File::Find, File::Glob, File::GlobMapper,
+File::Path, File::Spec, File::Spec::AmigaOS, File::Spec::Cygwin,
+File::Spec::Epoc, File::Spec::Functions, File::Spec::Mac, File::Spec::OS2,
+File::Spec::Unix, File::Spec::Win32, File::Temp, File::stat, FileCache,
+FileHandle, Filter::Simple, Filter::Util::Call, FindBin, Getopt::Long,
+Getopt::Long::Parser, Getopt::Std, Hash::Util, Hash::Util::FieldHash,
+I18N::Collate, I18N::LangTags, I18N::LangTags::Detect, I18N::Langinfo, IO,
+IO::Compress, IO::Compress::Adapter::Bzip2, IO::Compress::Adapter::Deflate,
+IO::Compress::Adapter::Identity, IO::Compress::Base,
+IO::Compress::Base::Common, IO::Compress::Bzip2, IO::Compress::Deflate,
+IO::Compress::Gzip, IO::Compress::Gzip::Constants, IO::Compress::RawDeflate,
+IO::Compress::Zip, IO::Compress::Zip::Constants,
+IO::Compress::Zlib::Constants, IO::Compress::Zlib::Extra, IO::Dir, IO::File,
+IO::Handle, IO::Pipe, IO::Poll, IO::Seekable, IO::Select,
+IO::Uncompress::Adapter::Bunzip2, IO::Uncompress::Adapter::Identity,
+IO::Uncompress::Adapter::Inflate, IO::Uncompress::AnyInflate,
+IO::Uncompress::AnyUncompress, IO::Uncompress::Base,
+IO::Uncompress::Bunzip2, IO::Uncompress::Gunzip, IO::Uncompress::Inflate,
+IO::Uncompress::RawInflate, IO::Uncompress::Unzip, IO::Zlib, JSON::PP,
+JSON::PP::Boolean, List::Util, List::Util::XS, Locale::Maketext,
+Locale::Maketext::Guts, Locale::Maketext::GutsLoader,
+Locale::Maketext::Simple, MIME::Base64, MIME::QuotedPrint, Math::BigFloat,
+Math::BigFloat::Trace, Math::BigInt, Math::BigInt::Calc,
+Math::BigInt::FastCalc, Math::BigInt::Lib, Math::BigInt::Trace,
+Math::BigRat, Math::BigRat::Trace, Math::Complex, Math::Trig, Memoize,
+Memoize::Expire, Memoize::Storable, Module::CoreList,
+Module::CoreList::Utils, Module::Load, Module::Load::Conditional,
+Module::Loaded, Module::Metadata, NEXT, O, Opcode, POSIX, Params::Check,
+Parse::CPAN::Meta, Perl::OSType, PerlIO, PerlIO::encoding, PerlIO::mmap,
+PerlIO::scalar, PerlIO::via, PerlIO::via::QuotedPrint, Safe,
+Scalar::List::Utils, Scalar::Util, Search::Dict, SelectSaver, SelfLoader,
+Storable, Sub::Util, Symbol, Sys::Hostname, Term::ANSIColor, Term::Cap,
+Term::Complete, Term::ReadLine, Term::Table::CellStack,
+Term::Table::HashBase, Term::Table::Spacer, Text::Abbrev, Text::Balanced,
+Text::CSV\*, Text::CSV_PP\*, Text::Diff\*, Text::Diff::Config\*,
+Text::Diff::Table\*, Text::ParseWords, Text::Tabs, Text::Wrap, Tie::Array,
+Tie::File, Tie::Handle, Tie::Hash, Tie::Hash::NamedCapture, Tie::Memoize,
+Tie::RefHash, Tie::Scalar, Tie::StdHandle, Tie::SubstrHash, Time::HiRes,
+Time::Local, Time::Piece, Time::Seconds, Time::gmtime, Time::localtime,
+Time::tm, UNIVERSAL, URI::Escape\*, Unicode::Collate,
+Unicode::Collate::Locale, Unicode::Normalize, XML::Tiny\*, XSLoader,
+YAML::Tiny\*.
+
+### Pragmas that load
+
+attributes, autodie, autodie::Scope::Guard, autodie::Scope::GuardStack,
+autodie::Util, autodie::exception, autodie::exception::system,
+autodie::hints, autodie::skip, autouse, base, bigfloat, bigint, bignum,
+bigrat, blib, builtin, bytes, constant, deprecate, encoding,
+encoding::warnings, experimental, feature, fields, filetest, integer, less,
+lib, locale, meta_notation, mro, ops, overload, overload::numbers,
+overloading, parent, perlfaq, re, sigtrap, source::encoding, stable, strict,
+subs, utf8, vars, version, version::regex, vmsish, warnings,
+warnings::register.
+
+`if`, `open` and `sort` are embedded too, but were not checked: their names
+are Perl keywords, so `require if` does not parse.
+
+### Embedded but do not load
+
+- No sockets: IO::Socket, IO::Socket::INET, IO::Socket::UNIX.
+- No threads: Thread, Thread::Queue, Thread::Semaphore.
+- No DBM: AnyDBM_File, Memoize::AnyDBM_File, Memoize::NDBM_File,
+  Memoize::SDBM_File.
+- Cannot duplicate STDOUT: Term::Table, Term::Table::Cell,
+  Term::Table::LineBreak, Term::Table::Util.
+- Need what upstream trims: charnames and _charnames (`unicore/Name.pm`, so
+  no `\N{NAME}`), diagnostics (`perldiag.pod`), ok (Test::More), File::Fetch
+  (IPC::Cmd), I18N::LangTags::List (its data is POD, which the trim strips).
+- VMS only: File::Spec::VMS.
 
 ## Not available
 
