@@ -6,7 +6,7 @@ WASM_DIR="${WASM_DIR:-/build/wasm}"
 REPO_DIR="${REPO_DIR:-/build/repo}"
 STACK_SIZE="${STACK_SIZE:-8388608}"
 INITIAL_MEMORY="${INITIAL_MEMORY:-16777216}"
-ASYNCIFY="${ASYNCIFY:-true}"
+ASYNCIFY="${ASYNCIFY:-false}"
 
 export PATH="$REPO_DIR/wasi-bin:$PATH"
 
@@ -122,7 +122,7 @@ if [ "$ASYNCIFY" = "true" ]; then
         ${WASM_OPT_FLAGS} \
         -o zeroperl.wasm
 else
-    wasm-opt zeroperl_reactor.wasm --strip-debug --enable-bulk-memory \
+    wasm-opt zeroperl_reactor.wasm -O3 --strip-debug --enable-bulk-memory \
         --enable-nontrapping-float-to-int --asyncify \
         --pass-arg=asyncify-ignore-imports \
         ${WASM_OPT_FLAGS} \

@@ -23,8 +23,8 @@ container run --rm -v $(pwd)/output:/output zeroperl cp -r /artifacts/. /output/
 ```
 
 Output in `./output/`:
-- `zeroperl.wasm` — reactor with asyncify
-- `zeroperl_reactor.wasm` — reactor without asyncify
+- `zeroperl.wasm` — the reactor, after wasm-opt's Asyncify pass (which setjmp needs)
+- `zeroperl_reactor.wasm` — the linker's output before that pass; it cannot run as is
 - `perl-wasi-prefix/` — Perl library prefix
 - `exiftool.min.pl` — minified ExifTool (if enabled)
 
@@ -50,7 +50,7 @@ container build --build-arg PERL_VERSION=5.42.0 --build-arg BUILD_EXIFTOOL=true 
 | `BUILD_EXIFTOOL` | `false` | Include ExifTool (roughly doubles the wasm size) |
 | `STACK_SIZE` | `8388608` | WASM stack (bytes) |
 | `INITIAL_MEMORY` | `16777216` | WASM initial memory (bytes) |
-| `ASYNCIFY` | `true` | Enable asyncify |
+| `ASYNCIFY` | `false` | Also let `fd_read` and host calls pause (Asyncify runs either way, for setjmp) |
 | `TRIM` | `true` | Strip unused modules |
 
 </details>

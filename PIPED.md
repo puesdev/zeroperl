@@ -94,11 +94,35 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
   serve them (see "Not available").
 - **`INITIAL_MEMORY` is 16 MiB** (upstream 32 MiB): the 8 MiB stack plus the
   data, with the heap growing from there.
+- **`ASYNCIFY=false` is the default**, and its `wasm-opt` pass now has `-O3`
+  like the other branch. This is the shipped build: Asyncify still runs,
+  since setjmp and longjmp (every `die`) need it, but `fd_read` and host
+  calls are not instrumented to pause, which piped's synchronous shim never
+  does. It is as small and as fast as `ASYNCIFY=true` (139 bytes smaller; a
+  300k-iteration regex loop took 81 ms against 82, median of 10), because
+  Perl's indirect op calls get instrumented either way.
+  `zeroperl_reactor.wasm` is the linker's output before that pass, so it
+  cannot run. `zeroperl.wasm` is 10.9 MB with everything above.
 
-### In progress
+## Testing a build
 
-- Measure `zeroperl.wasm` (asyncify) against `zeroperl_reactor.wasm`
-  (without). `zeroperl.wasm` is 10.9 MB with everything above.
+`test/` holds the checks each build passes. They run with Bun behind
+piped2's own WASI shim, so they need a piped2 checkout beside this repo (or
+`PIPED2=/path/to/piped2`):
+
+- `bun test/piped-check.ts [wasm]` runs exit statuses, `die`, `eval`,
+  `DESTROY`, `/dev/null`, file reads and more (default: `output/zeroperl.wasm`).
+- `bun test/module-check.ts <wasm> <list>` requires every embedded module in
+  a fresh instance; the list comes from the prefix the wasm was built from
+  (`docker exec zpdev find /zeroperl/lib -name '*.pm' | sort`).
+
+To rebuild without a full Docker build, use the dev container:
+`docker build --target native-perl -t zp-native .`, then
+`docker run -d --name zpdev -v "$PWD":/src:ro -v /tmp/zp:/work zp-native sleep infinity`.
+`docker exec zpdev sh /src/test/dev-wasi.sh` configures and builds WASI perl
+once (`dev-resume.sh` resumes its make), and
+`docker exec zpdev sh /src/test/dev-wasm.sh` rebuilds the prefix and wasm into
+`/tmp/zp/out` after each change.
 
 ## Modules
 
