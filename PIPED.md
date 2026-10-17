@@ -124,6 +124,12 @@ once (`dev-resume.sh` resumes its make), and
 `docker exec zpdev sh /src/test/dev-wasm.sh` rebuilds the prefix and wasm into
 `/tmp/zp/out` after each change.
 
+The released wasm comes from a clean `docker build --no-cache` of the tagged
+source. No two builds match byte for byte, because Configure records when it
+ran (`cf_time`) in the embedded `Config_heavy.pl`. Re-running the dev
+container's prefix step also re-tidies library files that are already tidied,
+which changes their spacing.
+
 ## Modules
 
 Every module embedded in the wasm was loaded with `require` in a fresh
