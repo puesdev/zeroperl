@@ -78,8 +78,3 @@ git clone https://github.com/6over3/zeroperl-ts
 ```
 
 See the [zeroperl-ts README](https://github.com/6over3/zeroperl-ts) for details.
-
-## Usage
-
-> **Note:** The first argument passed to Perl **must** be `zeroperl`.
-> Depending on your runtime, you may need to map `/dev/null` as a preopen.
