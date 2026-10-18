@@ -1,14 +1,14 @@
 # zeroperl in Piped
 
 This fork of [6over3/zeroperl](https://github.com/6over3/zeroperl) builds the
-`perl` command for [Piped](https://legendum.dojos.name/piped2) (piped2,
+`perl` command for [Piped](https://legendum.dojos.name/piped) (piped,
 MIT-licensed). Piped already runs Python 3 and JavaScript as WebAssembly; this
 adds Perl, aimed at what Perl does best: text processing.
 
 ## How Piped uses it
 
 - Each `perl` run instantiates the wasm in a Worker behind Piped's own
-  synchronous WASI shim (`src/wasm/wasi.ts` in piped2). User files come from
+  synchronous WASI shim (`src/wasm/wasi.ts` in piped). User files come from
   Piped's file system through WASI.
 - The worker calls `_initialize`, passes argv (allocated with `malloc`) to
   `zeroperl_init_with_args`, and takes the exit status as its return value
@@ -19,16 +19,16 @@ adds Perl, aimed at what Perl does best: text processing.
 - argv[0] can be anything. Piped passes `perl`, so `$^X` and `perl -h` say
   `perl`.
 - zeroperl answers `/dev/null` itself (every `perl -e` opens it at start).
-  Piped's shim should answer `fd_tell` on fds 0 to 2 with `ESPIPE` rather
-  than `EBADF`.
+  Piped's shim answers `fd_tell` on fds 0 to 2 with `ESPIPE` rather than
+  `EBADF`.
 - Errno values are WASI's, so `$!` and `die`'s exit status differ from Linux:
   a missing file is 44, not 2.
 - Perl's own library is embedded in the wasm, so nothing else ships with it.
   Pure-Perl modules a script needs can be loaded from the user's files at
   runtime.
 - Network access goes through Piped's `/dev/fetch` device (JSON request in,
-  JSON response out, text bodies). The plan is an `HTTP::Tiny` in Piped's perl
-  worker library that speaks this protocol, so it costs nothing in the wasm.
+  JSON response out, text bodies). Piped's perl worker serves its own
+  `HTTP::Tiny`, which speaks this protocol, so it costs nothing in the wasm.
 
 ### Size matters
 
@@ -107,8 +107,8 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
 ## Testing a build
 
 `test/` holds the checks each build passes. They run with Bun behind
-piped2's own WASI shim, so they need a piped2 checkout beside this repo (or
-`PIPED2=/path/to/piped2`):
+piped's own WASI shim, so they need a piped checkout beside this repo (or
+`PIPED=/path/to/piped`):
 
 - `bun test/piped-check.ts [wasm]` runs exit statuses, `die`, `eval`,
   `DESTROY`, `/dev/null`, file reads and more (default: `output/zeroperl.wasm`).
@@ -133,7 +133,7 @@ which changes their spacing.
 ## Modules
 
 Every module embedded in the wasm was loaded with `require` in a fresh
-instance behind piped2's WASI shim: 278 load and 24 do not. Those marked * are
+instance behind piped's WASI shim: 278 load and 24 do not. Those marked * are
 the CPAN additions above.
 
 ### Modules that load

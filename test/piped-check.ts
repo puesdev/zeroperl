@@ -1,11 +1,11 @@
-// Runs zeroperl.wasm behind piped2's own synchronous WASI shim, the way piped's
+// Runs zeroperl.wasm behind piped's own synchronous WASI shim, the way piped's
 // perl worker will: _initialize, zeroperl_init_with_args(...) & 255, then
 // zeroperl_free_interpreter (or zeroperl_flush, to test that path).
 // Usage: bun test/piped-check.ts [path/to/zeroperl.wasm]
-// Needs a piped2 checkout beside this repo, or PIPED2=/path/to/piped2.
+// Needs a piped checkout beside this repo, or PIPED=/path/to/piped.
 // TRACE=1 logs failing WASI calls; ONLY=text runs the cases whose name has it.
-const piped2 = process.env.PIPED2 ?? `${import.meta.dir}/../../piped2`;
-const { Exit, wasi } = await import(`${piped2}/src/wasm/wasi.ts`);
+const piped = process.env.PIPED ?? `${import.meta.dir}/../../piped`;
+const { Exit, wasi } = await import(`${piped}/src/wasm/wasi.ts`);
 
 const wasmPath = process.argv[2] ?? `${import.meta.dir}/../output/zeroperl.wasm`;
 const module = new WebAssembly.Module(await Bun.file(wasmPath).arrayBuffer());

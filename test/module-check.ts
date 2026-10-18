@@ -1,10 +1,10 @@
-// Requires every embedded module in a fresh zeroperl instance behind piped2's
+// Requires every embedded module in a fresh zeroperl instance behind piped's
 // WASI shim. Usage: bun test/module-check.ts zeroperl.wasm embedded-pm.txt
 // where embedded-pm.txt lists the prefix the wasm was built from:
 //   docker exec zpdev find /zeroperl/lib -name '*.pm' | sort > embedded-pm.txt
-// Needs a piped2 checkout beside this repo, or PIPED2=/path/to/piped2.
-const piped2 = process.env.PIPED2 ?? `${import.meta.dir}/../../piped2`;
-const { Exit, wasi } = await import(`${piped2}/src/wasm/wasi.ts`);
+// Needs a piped checkout beside this repo, or PIPED=/path/to/piped.
+const piped = process.env.PIPED ?? `${import.meta.dir}/../../piped`;
+const { Exit, wasi } = await import(`${piped}/src/wasm/wasi.ts`);
 
 const [wasmPath, listPath] = process.argv.slice(2);
 const module = new WebAssembly.Module(await Bun.file(wasmPath).arrayBuffer());

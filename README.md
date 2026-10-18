@@ -2,7 +2,7 @@ zeroperl is an experimental build of Perl5 in a sandboxed, self-contained WebAss
 
 Read the full blog [here](https://andrews.substack.com/p/zeroperl-sandboxed-perl-with-webassembly)
 
-This fork builds the `perl` command for [Piped](https://legendum.dojos.name/piped2). See [PIPED.md](PIPED.md) for how it is used and how it differs from upstream.
+This fork builds the `perl` command for [Piped](https://legendum.dojos.name/piped). See [PIPED.md](PIPED.md) for how it is used and how it differs from upstream.
 
 ## Build
 
