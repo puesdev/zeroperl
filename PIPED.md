@@ -48,8 +48,9 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
   B::Showlex and B::Terse load.
 - **Pure-Perl CPAN modules** are added by `pipeline/add-cpan-modules.sh` at
   pinned releases: Text::CSV 2.06 (with Text::CSV_PP), YAML::Tiny 1.76,
-  XML::Tiny 2.07, URI::Escape (from URI 5.37), Algorithm::Diff 1.201,
-  Text::Diff 1.46 and CGI::Tiny 1.003.
+  XML::Tiny 2.07, URI 5.40, Algorithm::Diff 1.201, Text::Diff 1.46,
+  CGI::Tiny 1.003, Try::Tiny 0.32 and JSON 4.11 (only `JSON.pm`, over the
+  embedded JSON::PP).
 - **WASI shims for POSIX** in `stubs/`, which wasi-libc lacks:
   - `fenv.h`: the rounding-mode constants. WebAssembly only rounds to nearest,
     so `fesetround` rejects the others.
@@ -102,7 +103,7 @@ as `unicore/Name.pl` (for `\N{NAME}` and `charnames`) are not added back.
   300k-iteration regex loop took 81 ms against 82, median of 10), because
   Perl's indirect op calls get instrumented either way.
   `zeroperl_reactor.wasm` is the linker's output before that pass, so it
-  cannot run. `zeroperl.wasm` is 10.9 MB with everything above.
+  cannot run. `zeroperl.wasm` is 11.0 MB with everything above.
 
 ## Testing a build
 
@@ -133,7 +134,7 @@ which changes their spacing.
 ## Modules
 
 Every module embedded in the wasm was loaded with `require` in a fresh
-instance behind piped's WASI shim: 278 load and 24 do not. Those marked * are
+instance behind piped's WASI shim: 345 load and 26 do not. Those marked * are
 the CPAN additions above.
 
 ### Modules that load
@@ -170,7 +171,7 @@ IO::Uncompress::Adapter::Bunzip2, IO::Uncompress::Adapter::Identity,
 IO::Uncompress::Adapter::Inflate, IO::Uncompress::AnyInflate,
 IO::Uncompress::AnyUncompress, IO::Uncompress::Base,
 IO::Uncompress::Bunzip2, IO::Uncompress::Gunzip, IO::Uncompress::Inflate,
-IO::Uncompress::RawInflate, IO::Uncompress::Unzip, IO::Zlib, JSON::PP,
+IO::Uncompress::RawInflate, IO::Uncompress::Unzip, IO::Zlib, JSON\*, JSON::PP,
 JSON::PP::Boolean, List::Util, List::Util::XS, Locale::Maketext,
 Locale::Maketext::Guts, Locale::Maketext::GutsLoader,
 Locale::Maketext::Simple, MIME::Base64, MIME::QuotedPrint, Math::BigFloat,
@@ -191,9 +192,22 @@ Text::Diff::Table\*, Text::ParseWords, Text::Tabs, Text::Wrap, Tie::Array,
 Tie::File, Tie::Handle, Tie::Hash, Tie::Hash::NamedCapture, Tie::Memoize,
 Tie::RefHash, Tie::Scalar, Tie::StdHandle, Tie::SubstrHash, Time::HiRes,
 Time::Local, Time::Piece, Time::Seconds, Time::gmtime, Time::localtime,
-Time::tm, UNIVERSAL, URI::Escape\*, Unicode::Collate,
-Unicode::Collate::Locale, Unicode::Normalize, XML::Tiny\*, XSLoader,
-YAML::Tiny\*.
+Time::tm, Try::Tiny\*, UNIVERSAL, URI\*, URI::Escape\*, URI::Heuristic\*,
+URI::IRI\*, URI::QueryParam\*, URI::Split\*, URI::URL\*, URI::WithBase\*,
+URI::_emailauth\*, URI::_foreign\*, URI::_generic\*, URI::_idna\*,
+URI::_ldap\*, URI::_login\*, URI::_punycode\*, URI::_query\*,
+URI::_segment\*, URI::_server\*, URI::_userpass\*, URI::data\*, URI::file\*,
+URI::file::Base\*, URI::file::FAT\*, URI::file::Mac\*, URI::file::OS2\*,
+URI::file::QNX\*, URI::file::Unix\*, URI::file::Win32\*, URI::ftp\*,
+URI::ftpes\*, URI::ftps\*, URI::geo\*, URI::gopher\*, URI::http\*,
+URI::https\*, URI::icap\*, URI::icaps\*, URI::irc\*, URI::ircs\*, URI::ldap\*,
+URI::ldapi\*, URI::ldaps\*, URI::mailto\*, URI::mms\*, URI::news\*,
+URI::nntp\*, URI::nntps\*, URI::pop\*, URI::rlogin\*, URI::rsync\*,
+URI::rtsp\*, URI::rtspu\*, URI::scp\*, URI::sftp\*, URI::sip\*, URI::sips\*,
+URI::smb\*, URI::smtp\*, URI::snews\*, URI::ssh\*, URI::telnet\*,
+URI::tn3270\*, URI::urn\*, URI::urn::oid\*, URI::ws\*, URI::wss\*,
+Unicode::Collate, Unicode::Collate::Locale, Unicode::Normalize, XML::Tiny\*,
+XSLoader, YAML::Tiny\*.
 
 ### Pragmas that load
 
@@ -221,6 +235,9 @@ are Perl keywords, so `require if` does not parse.
 - Need what upstream trims: charnames and _charnames (`unicore/Name.pm`, so
   no `\N{NAME}`), diagnostics (`perldiag.pod`), ok (Test::More), File::Fetch
   (IPC::Cmd), I18N::LangTags::List (its data is POD, which the trim strips).
+- Need CPAN modules left out: URI::otpauth (MIME::Base32) and URI::urn::isbn
+  (Business::ISBN). `URI->new` still accepts both schemes, without their own
+  methods.
 - VMS only: File::Spec::VMS.
 
 ## Not available

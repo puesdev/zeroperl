@@ -30,7 +30,9 @@ add() {
 add I/IS/ISHIGAKI/Text-CSV-2.06.tar.gz
 add E/ET/ETHER/YAML-Tiny-1.76.tar.gz
 add D/DC/DCANTRELL/XML-Tiny-2.07.tar.gz
-add O/OA/OALDERS/URI-5.37.tar.gz URI/Escape.pm
+add O/OA/OALDERS/URI-5.40.tar.gz
 add R/RJ/RJBS/Algorithm-Diff-1.201.tar.gz
 add N/NE/NEILB/Text-Diff-1.46.tar.gz
 add D/DB/DBOOK/CGI-Tiny-1.003.tar.gz
+add E/ET/ETHER/Try-Tiny-0.32.tar.gz
+add I/IS/ISHIGAKI/JSON-4.11.tar.gz JSON.pm
